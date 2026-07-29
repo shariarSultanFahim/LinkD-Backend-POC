@@ -2,7 +2,7 @@
 
 Complete developer-friendly reference guide for the Room Sync Backend API, covering Authentication, Room Management, and Real-Time Socket.io playback synchronization.
 
-- **Base URL:** `https://shariar_fahim5001.binarybards.online/api`
+- **Base URL:** `http://10.10.26.199:5001/api`
 - **Version:** `v1.0.0`
 - **Authentication Protocol:** `Bearer <JWT_TOKEN>`
 
