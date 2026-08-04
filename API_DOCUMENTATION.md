@@ -250,6 +250,69 @@ Removes the caller from the room. If the caller is the Host, the room is marked 
 
 ---
 
+#### 8. Music Sync (`/sync`)
+Syncs the music state with the host. Can be triggered by both the Host and Guests to get the latest latency-compensated playback state.
+
+- **Endpoint:** `POST /api/rooms/:roomCode/sync`
+- **Authentication:** Required (`Bearer <token>`)
+- **Permissions:** Host & Guests (Listeners)
+
+**Request Body:** None
+
+**Success Response (`200 OK`):**
+```json
+{
+  "roomCode": "A1B2C3",
+  "playbackState": {
+    "currentTrackUri": "spotify:track:4PTG3Z6ehGkBF3zI7Yspqs",
+    "currentPositionMs": 45200,
+    "isPaused": false,
+    "updatedAt": 1722184560000
+  }
+}
+```
+
+**Error Responses:**
+- `403 Forbidden` - User is not a member of the room
+- `404 Not Found` - Room does not exist or is inactive
+
+---
+
+#### 9. Music Pause / Play Toggle (`/pause`)
+Pauses or resumes (unpauses) playback for all listeners in the room. **Only the host can perform this action.** When unpausing, the backend automatically calculates the synced position (`currentPositionMs`) and updates `updatedAt` to ensure all guests resume in perfect synchronization with the host.
+
+- **Endpoint:** `POST /api/rooms/:roomCode/pause`
+- **Authentication:** Required (`Bearer <token>`)
+- **Permissions:** Host Only
+
+**Request Body (Optional):**
+```json
+{
+  "isPaused": false,
+  "positionMs": 45200
+}
+```
+*Note: If `isPaused` is omitted, the API toggles the current pause state (if paused -> unpause, if playing -> pause).*
+
+**Success Response (`200 OK`):**
+```json
+{
+  "roomCode": "A1B2C3",
+  "playbackState": {
+    "currentTrackUri": "spotify:track:4PTG3Z6ehGkBF3zI7Yspqs",
+    "currentPositionMs": 45200,
+    "isPaused": false,
+    "updatedAt": 1722184560000
+  }
+}
+```
+
+**Error Responses:**
+- `403 Forbidden` - Listener/Guest attempted to update pause state (`"Only room host can update playback pause state"`)
+- `404 Not Found` - Room does not exist or is inactive
+
+---
+
 ## 3. Socket.io Event Contracts
 
 ### Connection & Handshake
@@ -292,6 +355,29 @@ Pushes host playback state (periodic heartbeats or trigger events on Play/Pause/
   "currentTrackUri": "spotify:track:4PTG3Z6ehGkBF3zI7Yspqs",
   "currentPositionMs": 42000,
   "isPaused": false
+}
+```
+
+#### `sync_music`
+Triggers immediate playback synchronization with the host for room members.
+
+- **Emitted By:** Host & Listener
+- **Payload:**
+```json
+{
+  "roomCode": "A1B2C3"
+}
+```
+
+#### `pause_music`
+Pauses music playback across all guests in the room.
+
+- **Emitted By:** Host only
+- **Payload:**
+```json
+{
+  "roomCode": "A1B2C3",
+  "positionMs": 45200
 }
 ```
 

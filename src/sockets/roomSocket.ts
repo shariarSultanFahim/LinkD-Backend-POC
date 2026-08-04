@@ -82,6 +82,67 @@ export function registerRoomSockets(io: Server, socket: AuthenticatedSocket): vo
     }
   );
 
+  socket.on(
+    'sync_music',
+    async ({ roomCode }: { roomCode: string }) => {
+      try {
+        if (!roomCode) {
+          socket.emit('error', { message: 'roomCode is required' });
+          return;
+        }
+
+        const formattedCode = roomCode.toUpperCase();
+        const playbackState = await roomService.syncPlayback(formattedCode, userId);
+
+        if (playbackState) {
+          io.to(formattedCode).emit('state_update', {
+            roomCode: formattedCode,
+            ...playbackState,
+          });
+        }
+      } catch (error: any) {
+        socket.emit('error', { message: error.message || 'Sync music failed' });
+      }
+    }
+  );
+
+  socket.on(
+    'pause_music',
+    async ({
+      roomCode,
+      positionMs,
+      isPaused,
+    }: {
+      roomCode: string;
+      positionMs?: number;
+      isPaused?: boolean;
+    }) => {
+      try {
+        if (!roomCode) {
+          socket.emit('error', { message: 'roomCode is required' });
+          return;
+        }
+
+        const formattedCode = roomCode.toUpperCase();
+        const room = await roomService.pausePlayback(
+          formattedCode,
+          userId,
+          positionMs,
+          isPaused
+        );
+
+        if (room.playbackState) {
+          io.to(formattedCode).emit('state_update', {
+            roomCode: formattedCode,
+            ...room.playbackState,
+          });
+        }
+      } catch (error: any) {
+        socket.emit('error', { message: error.message || 'Pause music failed' });
+      }
+    }
+  );
+
   socket.on('leave_room', async ({ roomCode }: { roomCode: string }) => {
     try {
       if (!roomCode) return;

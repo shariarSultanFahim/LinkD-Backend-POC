@@ -39,4 +39,18 @@ router.post(
   asyncErrorWrapper((req, res) => roomController.leaveRoom(req, res))
 );
 
+router.post(
+  '/:roomCode/sync',
+  authMiddleware,
+  validateParams(roomCodeParamSchema),
+  asyncErrorWrapper((req, res) => roomController.syncMusic(req, res))
+);
+
+router.post(
+  '/:roomCode/pause',
+  authMiddleware,
+  validateParams(roomCodeParamSchema),
+  asyncErrorWrapper((req, res) => roomController.pauseMusic(req, res))
+);
+
 export default router;

@@ -15,6 +15,8 @@ const io = new Server(server, {
   },
 });
 
+app.set('io', io);
+
 // Socket.io middleware for authentication
 io.use((socket, next) => socketAuthMiddleware(socket as AuthenticatedSocket, next));
 
