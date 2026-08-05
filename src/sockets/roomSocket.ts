@@ -15,6 +15,20 @@ export function registerRoomSockets(io: Server, socket: AuthenticatedSocket): vo
     return;
   }
 
+  // ──────────────────────────────────────────────────────────
+  // Time Sync — allows clients to calculate their clock offset
+  // relative to the server for precise playback synchronization.
+  // Client sends { clientTime: Date.now() }, server responds
+  // with both the client's original timestamp and the server's
+  // current time so the client can compute RTT and offset.
+  // ──────────────────────────────────────────────────────────
+  socket.on('timesync', (data: { clientTime: number }) => {
+    socket.emit('timesync_response', {
+      clientTime: data?.clientTime ?? 0,
+      serverTime: Date.now(),
+    });
+  });
+
   socket.on('join_room', async ({ roomCode }: { roomCode: string }) => {
     try {
       if (!roomCode) {
@@ -33,6 +47,25 @@ export function registerRoomSockets(io: Server, socket: AuthenticatedSocket): vo
 
       // Notify other members in the room
       socket.to(formattedCode).emit('listener_joined', { userId, username });
+
+      // Send current playback state to the joining client so it can
+      // immediately sync without a separate sync_music request.
+      if (room.playbackState) {
+        const serverTime = Date.now();
+        let currentPositionMs = room.playbackState.currentPositionMs;
+        if (!room.playbackState.isPaused) {
+          currentPositionMs += serverTime - room.playbackState.updatedAt;
+        }
+
+        socket.emit('state_update', {
+          roomCode: formattedCode,
+          currentTrackUri: room.playbackState.currentTrackUri,
+          currentPositionMs,
+          isPaused: room.playbackState.isPaused,
+          updatedAt: serverTime,
+          serverTime,
+        });
+      }
     } catch (error: any) {
       socket.emit('error', { message: error.message || 'Failed to join socket room' });
     }
@@ -58,24 +91,34 @@ export function registerRoomSockets(io: Server, socket: AuthenticatedSocket): vo
         }
 
         const formattedCode = roomCode.toUpperCase();
-        const updatedAt = Date.now();
-        
-        // Update database through RoomService (verifies host authorization)
-        await roomService.updatePlayback(formattedCode, userId, {
-          currentTrackUri,
-          currentPositionMs,
-          isPaused,
-          updatedAt,
-        });
+        const serverTime = Date.now();
 
-        // Broadcast to listeners (excluding host)
+        // ── BROADCAST FIRST ──────────────────────────────────
+        // Emit to all listeners immediately so they receive the
+        // update with minimal latency. DB persistence happens
+        // asynchronously afterwards.
         socket.to(formattedCode).emit('state_update', {
           roomCode: formattedCode,
           currentTrackUri,
           currentPositionMs,
           isPaused,
-          updatedAt,
+          updatedAt: serverTime,
+          serverTime,
         });
+
+        // ── PERSIST ASYNC ────────────────────────────────────
+        // Fire-and-forget DB update. Errors are logged but do
+        // not block the real-time broadcast path.
+        roomService
+          .updatePlayback(formattedCode, userId, {
+            currentTrackUri,
+            currentPositionMs,
+            isPaused,
+            updatedAt: serverTime,
+          })
+          .catch((err) => {
+            console.error('[roomSocket] playback_update DB persist failed:', err.message);
+          });
       } catch (error: any) {
         socket.emit('error', { message: error.message || 'Playback update failed' });
       }
@@ -93,11 +136,15 @@ export function registerRoomSockets(io: Server, socket: AuthenticatedSocket): vo
 
         const formattedCode = roomCode.toUpperCase();
         const playbackState = await roomService.syncPlayback(formattedCode, userId);
+        const serverTime = Date.now();
 
         if (playbackState) {
-          io.to(formattedCode).emit('state_update', {
+          // Only send to the requesting socket — this is a
+          // self-sync, not a room-wide broadcast.
+          socket.emit('state_update', {
             roomCode: formattedCode,
             ...playbackState,
+            serverTime,
           });
         }
       } catch (error: any) {
@@ -132,9 +179,11 @@ export function registerRoomSockets(io: Server, socket: AuthenticatedSocket): vo
         );
 
         if (room.playbackState) {
+          const serverTime = Date.now();
           io.to(formattedCode).emit('state_update', {
             roomCode: formattedCode,
             ...room.playbackState,
+            serverTime,
           });
         }
       } catch (error: any) {

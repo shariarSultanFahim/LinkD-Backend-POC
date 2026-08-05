@@ -14,7 +14,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/rooms', roomRoutes);
 
 // Futuristic Cyber-Tech Visual Endpoint
-app.get('/', (req, res) => {
+app.get('/', (_req, res) => {
   res.send(`
 <!DOCTYPE html>
 <html lang="en">

@@ -81,12 +81,14 @@ export class RoomController extends BaseController {
       const { roomCode } = req.params;
       const userId = (req as any).user.userId;
       const playbackState = await this.roomService.syncPlayback(roomCode, userId);
+      const serverTime = Date.now();
       
       const io = req.app.get('io');
       if (io && playbackState) {
         io.to(roomCode.toUpperCase()).emit('state_update', {
           roomCode: roomCode.toUpperCase(),
           ...playbackState,
+          serverTime,
         });
       }
 
@@ -95,6 +97,7 @@ export class RoomController extends BaseController {
         {
           roomCode: roomCode.toUpperCase(),
           playbackState,
+          serverTime,
         },
         200
       );
@@ -115,11 +118,13 @@ export class RoomController extends BaseController {
         typeof isPaused === 'boolean' ? isPaused : undefined
       );
 
+      const serverTime = Date.now();
       const io = req.app.get('io');
       if (io && room.playbackState) {
         io.to(room.roomCode).emit('state_update', {
           roomCode: room.roomCode,
           ...room.playbackState,
+          serverTime,
         });
       }
 
@@ -128,6 +133,7 @@ export class RoomController extends BaseController {
         {
           roomCode: room.roomCode,
           playbackState: room.playbackState,
+          serverTime,
         },
         200
       );
